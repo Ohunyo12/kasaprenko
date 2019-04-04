@@ -1,0 +1,124 @@
+---
+title: "Determine This"
+author: "Olusoji Oluwafemi Daniel"
+date: "3 April 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(readr)
+library(tidyverse)
+library(ggmap)
+library(CAMAN)
+library(rjags)
+library(runjags)
+library(gamlss)
+
+alex_data <- read_csv("Data/data.csv", col_names = T)
+#names(alex_data)
+
+
+```
+
+## Exploratory Analysis and Data Cleaning
+
+### Spatial Plot of Measurement Locations
+
+We make a spatial point plot of the farms and their locations.
+
+```{r exp1}
+lat <- 7.451099
+lon <- 3.896599
+
+ggplot(data = alex_data, aes(x = Longitude, y = latitude)) + 
+  geom_point(size = 2) + theme_bw() + geom_jitter(width = 0.60) + 
+  labs(x = "Longitude", y = "Latitude")
+#gganimate::transition_time(Longitude) +
+```
+
+Based on the above plot, one can clearly see three clusters based on the locations of the farms where the samples were taken. The first cluster of farms occurs at latitude below 7.450, the second cluster of farms are at latitude above 7.450 but lesser than latitude 7.475, while the thired cluster of farms occurs above the last latitude.
+
+### Cluster Division
+
+We divide the dataset into three clusters based on the findings above.
+
+```{r cluster_division}
+alex_data <- alex_data %>% dplyr::mutate(Id = case_when(
+  latitude < 7.4525 ~ 1,
+  latitude >= 7.4525 & latitude <= 7.475 ~ 2,
+  latitude > 7.475 ~ 3
+), M.C_logit = psych::logit(M.C) ) %>% dplyr::mutate(Id2 = as.factor(Id))
+
+ alex_data %>% ggplot(data = ., aes(x = Longitude, y = latitude, 
+                                              color = Id2)) + 
+  geom_point(size = 2) + theme_bw() + labs(color = "Cluster_Id")
+```
+
+### Relationships Between Variables
+
+####  Thermal.C
+
+```{r thermal.c}
+alex_data %>% ggplot(aes(y = Thermal.C, x = Temp)) + 
+  geom_point(aes(color = Id2), size = 1.5) + theme_bw() + 
+  labs(x = "Temperature", color = "Cluster_Id")
+
+alex_data %>% ggplot(aes(y = Thermal.C, x = M.C)) + 
+  geom_point(aes(color = Id2), size = 1.5) + theme_bw() + 
+  labs(x = "Moisture Content", color = "Cluster_Id")
+
+alex_data %>% ggplot(aes(y = Thermal.C, x = Elevation)) + 
+  geom_point(aes(color = Id2), size = 1.5) + theme_bw() + 
+  labs(x = "Elevation", color = "Cluster_Id")
+```
+
+####  Thermal.D
+
+```{r thermal.d}
+alex_data %>% ggplot(aes(y = Thermal.D, x = Temp)) + 
+  geom_point(aes(color = Id2), size = 1.5) + theme_bw() + 
+  labs(x = "Temperature", color = "Cluster_Id")
+
+alex_data %>% ggplot(aes(y = Thermal.D, x = M.C)) + 
+  geom_point(aes(color = Id2), size = 1.5) + theme_bw() + 
+  labs(x = "Moisture Content", color = "Cluster_Id")
+
+alex_data %>% ggplot(aes(y = Thermal.D, x = Elevation)) + 
+  geom_point(aes(color = Id2), size = 1.5) + theme_bw() + 
+  labs(x = "Elevation", color = "Cluster_Id")
+```
+
+####  S.H
+
+```{r thermal.d}
+alex_data %>% ggplot(aes(y = S.H, x = Temp)) + 
+  geom_point(aes(color = Id2), size = 1.5) + theme_bw() + 
+  labs(x = "Temperature", color = "Cluster_Id")
+
+alex_data %>% ggplot(aes(y = S.H, x = M.C)) + 
+  geom_point(aes(color = Id2), size = 1.5) + theme_bw() + 
+  labs(x = "Moisture Content", color = "Cluster_Id")
+
+alex_data %>% ggplot(aes(y = S.H, x = Elevation)) + 
+  geom_point(aes(color = Id2), size = 1.5) + theme_bw() + 
+  labs(x = "Elevation", color = "Cluster_Id")
+```
+
+
+##  Exploratory Modelling
+
+We initially choose to treat this data as if it were clustered, since initial explorations reveals the presence of 3 clusters. It should be noted here that we lump up both the spatial and intra-cluster correlation into the intra-cluster correlation. Before we go ahead to fit these models, we would like to figure the best fitting distribution to each of the response variable.
+
+```{r}
+
+
+```
+
+
+
+
+
+
+
+
