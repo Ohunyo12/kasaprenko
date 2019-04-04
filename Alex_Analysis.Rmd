@@ -6,7 +6,7 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, message = F, warning = F)
 library(readr)
 library(tidyverse)
 library(ggmap)
@@ -109,8 +109,19 @@ alex_data %>% ggplot(aes(y = S.H, x = Elevation)) +
 
 We initially choose to treat this data as if it were clustered, since initial explorations reveals the presence of 3 clusters. It should be noted here that we lump up both the spatial and intra-cluster correlation into the intra-cluster correlation. Before we go ahead to fit these models, we would like to figure the best fitting distribution to each of the response variable.
 
+```{r , message=FALSE, results='hide'}
+families_thermalC <- c("NO", "GA", "LOGNO", "IGAMMA")
+AICs <- sapply(families_thermalC, function(x) {
+  AIC(gamlss(Thermal.C~ Elevation + Temp + M.C, 
+           data = alex_data, family = x))
+})
+```
+
+
+
 ```{r}
-AIC(gamlss(Thermal.C~ Elevation + Temp + M.C, data = ID1, family = NO))
+knitr::kable(data.frame(Distribution = families_thermalC, AICs = AICs), 
+             row.names = F, align = 'c')
 
 ```
 
