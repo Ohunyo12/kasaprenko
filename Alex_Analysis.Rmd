@@ -34,7 +34,6 @@ lon <- 3.896599
 ggplot(data = alex_data, aes(x = Longitude, y = latitude)) + 
   geom_point(size = 2) + theme_bw() + geom_jitter(width = 0.60) + 
   labs(x = "Longitude", y = "Latitude")
-#gganimate::transition_time(Longitude) +
 ```
 
 Based on the above plot, one can clearly see three clusters based on the locations of the farms where the samples were taken. The first cluster of farms occurs at latitude below 7.450, the second cluster of farms are at latitude above 7.450 but lesser than latitude 7.475, while the thired cluster of farms occurs above the last latitude.
@@ -91,7 +90,7 @@ alex_data %>% ggplot(aes(y = Thermal.D, x = Elevation)) +
 
 ####  S.H
 
-```{r thermal.d}
+```{r s.h}
 alex_data %>% ggplot(aes(y = S.H, x = Temp)) + 
   geom_point(aes(color = Id2), size = 1.5) + theme_bw() + 
   labs(x = "Temperature", color = "Cluster_Id")
