@@ -109,7 +109,7 @@ alex_data %>% ggplot(aes(y = S.H, x = Elevation)) +
 
 We initially choose to treat this data as if it were clustered, since initial explorations reveals the presence of 3 clusters. It should be noted here that we lump up both the spatial and intra-cluster correlation into the intra-cluster correlation. Before we go ahead to fit these models, we would like to figure the best fitting distribution to each of the response variable.
 
-###THERMAL C
+### THERMAL C
 
 ```{r, message=FALSE, results='hide'}
 families_thermalC <- c("NO", "GA", "LOGNO", "IGAMMA")
@@ -117,6 +117,9 @@ AICs <- sapply(families_thermalC, function(x) {
   AIC(gamlss(Thermal.C~ Elevation + Temp + M.C, 
            data = alex_data, family = x))
 })
+```
+
+
 
 ```{r}
 knitr::kable(data.frame(Distribution = families_thermalC, AICs = AICs), 
@@ -124,13 +127,16 @@ knitr::kable(data.frame(Distribution = families_thermalC, AICs = AICs),
 
 ```
 
-###S.H
+### S.H
+
 ```{r, message=FALSE, results='hide'}
 families_S.H <- c("NO", "GA", "LOGNO", "IGAMMA")
 AICs <- sapply(families_S.H, function(x) {
   AIC(gamlss(S.H~ Elevation + Temp + M.C, 
            data = alex_data, family = x))
 })
+```
+
 
 ```{r}
 knitr::kable(data.frame(Distribution = families_S.H, AICs = AICs), 
@@ -138,13 +144,16 @@ knitr::kable(data.frame(Distribution = families_S.H, AICs = AICs),
 
 ```
 
-###ThermalD
+### ThermalD
+
 ```{r, message=FALSE, results='hide'}
 families_thermalD <- c("NO", "GA", "LOGNO", "IGAMMA")
 AICs <- sapply(families_thermalD, function(x) {
   AIC(gamlss(Thermal.D~ Elevation + Temp + M.C, 
            data = alex_data, family = x))
 })
+```
+
 
 
 ```{r}
@@ -153,4 +162,4 @@ knitr::kable(data.frame(Distribution = families_thermalD, AICs = AICs),
 
 ```
 
-
+The *Normal* distribution has the lowest AIC here, hence it is selected as the distribution of choice. However, the range of the dataset calls for concern here as only one data point equals 1. 
