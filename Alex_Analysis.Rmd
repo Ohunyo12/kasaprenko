@@ -110,7 +110,7 @@ alex_data %>% ggplot(aes(y = S.H, x = Elevation)) +
 We initially choose to treat this data as if it were clustered, since initial explorations reveals the presence of 3 clusters. It should be noted here that we lump up both the spatial and intra-cluster correlation into the intra-cluster correlation. Before we go ahead to fit these models, we would like to figure the best fitting distribution to each of the response variable.
 
 ```{r}
-
+AIC(gamlss(Thermal.C~ Elevation + Temp + M.C, data = ID1, family = NO))
 
 ```
 
