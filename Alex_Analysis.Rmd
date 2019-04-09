@@ -293,134 +293,73 @@ thermalC_bayesian
 ###Thermal.C
 ```{r, Thermal.C2}
 #Bayesian random effect model for MC (spatial correlation treated via accounting for clustering)
-  alex_data <- alex_data[order(alex_data$Id),]
-  #normal assumption for thermal C
-  cat("
-      model{
-      #### #the normal likelihood for the data
-      for(i in 1: N){
-      mu[i] <-  beta[1] + beta[2]*Elevation[i] + beta[3]*Temp[i] + beta[4]*MC[i] + b[Id[i]]
-      
-      tau[i] <- pow(sig[i], -2)
-      y[i] ~ dnorm(mu[i], tau[i])
+alex_data <- alex_data[order(alex_data$Id),]
+#normal assumption for thermal C
+cat("
+    model{
+    #### #the normal likelihood for the data
+    for(i in 1: N){
+    mu[i] <-  beta[1] + beta[2]*Elevation[i] + beta[3]*Temp[i] + beta[4]*MC[i]
+    
+    y[i] ~ dnorm(mu[i], tau)
       res[i]=y[i]-mu[i]
-      }
-      
-      #the cluster random effects
-      for(j in 1:J){
-      b[j] ~ dnorm(beta[1], tau.b)
-      }
-      
-      #priors for the population parameters
-      #prior for the betas
-      for(i in 1:4){
-      beta[i] ~ dnorm(0.0, 1.0E-5)
-      }
-      
+    }
+    
+    #the cluster random effects
+    for(j in 1:J){
+    b[j] ~ dnorm(beta[1], tau.b)
+    }
+    
     #priors for the population parameters
     #variance
     tau <- pow(sigma_y, -2) #converting a precision
     sigma_y ~ dunif(0, 20) #sampling a standard deviation
-      
+    
+    #priors for the population parameters
+    #prior for the betas
+    for(i in 1:4){
+    beta[i] ~ dnorm(0.0, 1.0E-5)
+    }
+    
+    #prior for the random effect parameters
+    #variance between clusters
+    tau.b <- pow(sigma.b, -2) #converting it to a precision
+    sigma.b ~ dunif(0, 20) #sampling a standard deviation
+    
+    ###Intra cluster correlation
+    #cluster1
+    icc <- sigma.b / (sigma.b + sigma_y)
+    
+  ######fit resiuals###########
+    fit=res[]
+    
+   
+    }", file =  "C:/Users/user/Documents/kas/sp/ThermalC_bayesian.bug")
 
-      #prior for the random effect parameters
-      #variance between clusters
-      tau.b <- pow(sigma.b, -2) #converting it to a precision
-      sigma.b ~ dunif(0, 20) #sampling a standard deviation
-      
-      ###Intra cluster correlation
-      #cluster1
-      
-      icc = sigma_y / (sigma.b + sigma_y)
-      
-      ######fit resiuals###########
-      fit=res[]}", file =  "C:/Users/user/Documents/kas/sp/ThermalC_bayesian.bug")
-  
-  thermalCdata <- list(N = nrow(alex_data),
-                       y = alex_data$Thermal.C,
-                       Elevation = alex_data$Elevation,
-                       Temp = alex_data$Temp,
-                       MC = alex_data$M.C,
-                       J = length(unique(alex_data$Id))
-  )
-  
-  thermalCini <- list(list(beta = c(0.9, 0.002, 0.03, 1.59), sigma_y = 0.12, sigma.b = 0.12),
-                      list(beta = c(0.9, 0.002, 0.03, 1.59)/2, sigma_y = 0.12/2, sigma.b = 0.12/2))
-  
-  thermalC_bayesian <- run.jags(model =  "C:/Users/user/Documents/kas/sp/ThermalC_bayesian.bug",
-                                monitor=c("beta", "sigma_y", "sigma.b", "icc", "fit"),
-                                data = thermalCdata, inits = thermalCini, n.chains = 2,
-                                sample = 50000, burnin = 50000,
-                                thin = 15, adapt = 40000,
-                                method = "rjags", jags.refresh = 10)
-  thermalC_bayesian
+thermalCdata <- list(N = nrow(alex_data),
+                     y = alex_data$Thermal.C,
+                     Elevation = alex_data$Elevation,
+                     Temp = alex_data$Temp,
+                     MC = alex_data$M.C,
+                     J = length(unique(alex_data$Id))
+)
+
+thermalCini <- list(list(beta = c(0.9, 0.002, 0.03, 1.59), sigma_y=0.12, 
+                         sigma.b = 0.12),
+                    list(beta = c(0.9, 0.002, 0.03, 1.59)/2, sigma_y=0.12/2, 
+                         sigma.b = 0.12/2))
+
+thermalC_bayesian <- run.jags(model =  "C:/Users/user/Documents/kas/sp/ThermalC_bayesian.bug",
+                              monitor=c("beta", "sigma_y", "sigma.b","fit", "icc"),
+                              data = thermalCdata, inits = thermalCini, n.chains = 2,
+                              sample = 50000, burnin = 50000,
+                              thin = 15, adapt = 40000,
+                              method = "rjags", jags.refresh = 10)
+thermalC_bayesian
 
 ```
 
 ###s.H
 
-```{r, S.H2}
-#Bayesian random effect model for MC (spatial correlation treated via accounting for clustering)
-  alex_data <- alex_data[order(alex_data$Id),]
-  #normal assumption for thermal C
-  cat("
-      model{
-      #### #the normal likelihood for the data
-      for(i in 1: N){
-      mu[i] <-  beta[1] + beta[2]*Elevation[i] + beta[3]*Temp[i] + beta[4]*MC[i] + b[Id[i]]
-      
-      tau[i] <- pow(sig[i], -2)
-      y[i] ~ dlnorm(mu[i], tau[i])
-      res[i]=y[i]-mu[i]
-      }
-      
-      #the cluster random effects
-      for(j in 1:J){
-      b[j] ~ dnorm(beta[1], tau.b)
-      }
-      
-      #priors for the population parameters
-      #prior for the betas
-      for(i in 1:4){
-      beta[i] ~ dnorm(0.0, 1.0E-5)
-      }
-      
-    #priors for the population parameters
-    #variance
-    tau <- pow(sigma_y, -2) #converting a precision
-    sigma_y ~ dunif(0, 20) #sampling a standard deviation
-      
 
-      #prior for the random effect parameters
-      #variance between clusters
-      tau.b <- pow(sigma.b, -2) #converting it to a precision
-      sigma.b ~ dunif(0, 20) #sampling a standard deviation
-      
-      ###Intra cluster correlation
-      #cluster
-      icc = sigma_y / (sigma.b + sigma_y)
-      
-      ######fit resiuals###########
-      fit=res[]}", file =  "C:/Users/user/Documents/kas/sp/ThermalC_bayesian.bug")
-  
-  thermalCdata <- list(N = nrow(alex_data),
-                       y = alex_data$Thermal.C,
-                       Elevation = alex_data$Elevation,
-                       Temp = alex_data$Temp,
-                       MC = alex_data$M.C,
-                       J = length(unique(alex_data$Id))
-  )
-  
-  thermalCini <- list(list(beta = c(0.9, 0.002, 0.03, 1.59), sigma_y = 0.12, sigma.b = 0.12),
-                      list(beta = c(0.9, 0.002, 0.03, 1.59)/2, sigma_y = 0.12/2, sigma.b = 0.12/2))
-  
-  thermalC_bayesian <- run.jags(model =  "C:/Users/user/Documents/kas/sp/ThermalC_bayesian.bug",
-                                monitor=c("beta", "sigma_y", "sigma.b", "icc", "fit"),
-                                data = thermalCdata, inits = thermalCini, n.chains = 2,
-                                sample = 50000, burnin = 50000,
-                                thin = 15, adapt = 40000,
-                                method = "rjags", jags.refresh = 10)
-  thermalC_bayesian
-  
-```
 
