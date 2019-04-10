@@ -148,7 +148,7 @@ knitr::kable(data.frame(Distribution = families_S.H, AICs = AICs),
 
 ```
 
-The *Inverse Gamma* distribution has the lowest AIC here, hence it is selected as the distribution of choice.
+The *Inverse Gamma* distribution has the lowest AIC here but since its gain in AIC is comparable to the *Log-normal distribution*, the log-normal distribution is selected.
 
 ### ThermalD
 
@@ -168,40 +168,45 @@ knitr::kable(data.frame(Distribution = families_thermalD, AICs = AICs),
 
 ```
 
-The *Normal* distribution has the lowest AIC here, hence it is selected as the distribution of choice. However, the range of the dataset calls for concern here as only one data point equals 1. 
+The *Normal* distribution has the lowest AIC here, hence it should selected as the distribution of choice. However, the range of the dataset calls for concern here as only one data point equals 1. Therefore, We will try to fit Thermal.D, its logit transformed version with *Beta*, *normal* and *normal* distributions respectively without the observation in question.
 
-So therefore, We will try to fit Thermal.D with *Beta* distribution and remove the observation that is equals to one.
-
-```{r, Thermal.D Beta distribution}
-alex_data1=alex_data[-17,]
-AIC(gamlss(Thermal.D~ Elevation + Temp + M.C, 
+```{r, message=FALSE, results='hide'}
+alex_data1 <- alex_data[-17, ]
+aic_beta <- AIC(gamlss(Thermal.D~ Elevation + Temp + M.C, 
            data = alex_data1, family = BE))
 ```
 
-We are also going to fit a log transformation on Thermal.D with *Normal* distribution and 
-remove the observation that is equals to one.
 
-```{r, Logit Transformation of Thermal.D Normal distribution}
-alex_data1=alex_data[-17,]
-Thermal.D_logit= psych::logit(alex_data1$Thermal.D)
-AIC(gamlss(Thermal.D_logit~ Elevation + Temp + M.C, 
+```{r, message=FALSE, results='hide'}
+#alex_data1=alex_data[-17,] # This is not needed since it has been defined above
+Thermal.D_logit <- psych::logit(alex_data1$Thermal.D)
+aic_logitnorm <- AIC(gamlss(Thermal.D_logit~ Elevation + Temp + M.C, 
+           data = alex_data1, family = NO))
+aic_norm <- AIC(gamlss(Thermal.D ~ Elevation + Temp + M.C, 
            data = alex_data1, family = NO))
 ```
 
+```{r}
+knitr::kable(data.frame(Distributions = c("NO[logit]", "NO[-17]", "Beta"), 
+                        AICs = c(aic_logitnorm, aic_norm, aic_beta)),
+             row.names = F, align = 'c')
+```
+Fitting a *Beta* distribution without the observation under scrutiny results in a negative AIC as well but one that is smaller than that of the normal distribution. Also, the AIC for model $NO[17]$ is quite close to that of the model with the full data above. This hints at this observation not causing a significant change in inference, hence the analysis could be continued without this observation. This would then mean that the *Beta* distribution would be the most ideal since both the logit transformed and the *NO[17]* versions have larger AICs.
 
 ## Bayesian Linear Regression (without clustering and heteroscedasticity)
-## Thermal.C
+
+### Thermal.C
+
 ```{r, Thermal.C}
 ###normal assumption for Thermal.C
 cat("
     model{
     #### #the normal likelihood for the data
-    for(i in 1: N){
-    mu[i] <-  beta[1] + beta[2]*Elevation[i] + beta[3]*Temp[i] + beta[4]*MC[i]
-    y[i] ~ dnorm(mu[i], tau)
+    for(i in 1: N) {
+      mu[i] <-  beta[1] + beta[2]*Elevation[i] + beta[3]*Temp[i] + beta[4]*MC[i]
+      y[i] ~ dnorm(mu[i], tau)
     
-res[i]=y[i]-mu[i]
-
+      res[i] <- y[i]-mu[i]
 }	
     
     #priors for the population parameters
@@ -210,14 +215,15 @@ res[i]=y[i]-mu[i]
     sigma_y ~ dunif(0, 20) #sampling a standard deviation
     
     #prior for the betas
-    for(i in 1:4){
+    for(i in 1:4) {
     beta[i] ~ dnorm(0.0, 1.0E-5)
     }
-fit=(res[])
-
+    #I don't understand this line. 
+    ##You already have the residuals in res????
+    #fit=(res[])
     
-    }",
-    file = "C:/Users/user/Documents/kas/sp/ThermalC_bayesian.bug")
+}",
+    file = "ThermalC_bayesian.bug")
 
 thermalCdata <- list(N = nrow(alex_data),
                      y = alex_data$Thermal.C,
@@ -229,14 +235,19 @@ thermalCdata <- list(N = nrow(alex_data),
 thermalCini <- list(list(beta = c(0.9, 0.002, 0.03, 1.59), sigma_y = 0.12),
                     list(beta = c(0.9, 0.002, 0.03, 1.59)/2, sigma_y = 0.12/2))
 
-thermalC_bayesian <- run.jags(model = "C:/Users/user/Documents/kas/sp/ThermalC_bayesian.bug",
-                              monitor=c("beta", "sigma_y","fit"),
+thermalC_bayesian <- run.jags(model = "ThermalC_bayesian.bug",
+                              monitor=c("beta", "sigma_y","res"),
                               data = thermalCdata, inits = thermalCini, n.chains = 2,
                               sample = 30000, burnin = 20000,
                               thin = 15, adapt = 40000,
                               method = "rjags", jags.refresh = 10)
-thermalC_bayesian
- 
+
+###Where are the posterior summary checks?
+plot(thermalC_bayesian, "trace", vars = c("beta", "sigma_y"))
+plot(thermalC_bayesian, "autocorr", vars = c("beta", "sigma_y"))
+```
+```{r}
+knitr::kable(thermalC_bayesian$summaries[1:5, c(1:5)])
 ```
 
 ### S.H
@@ -288,9 +299,11 @@ thermalC_bayesian <- run.jags(model = "C:/Users/user/Documents/kas/sp/ThermalC_b
 thermalC_bayesian
  
 ```
-##Bayesian random effect model for MC (spatial correlation treated via accounting for clustering) 
 
-###Thermal.C
+## Bayesian random effect model for MC (spatial correlation treated via accounting for clustering) 
+
+### Thermal.C
+
 ```{r, Thermal.C2}
 #Bayesian random effect model for MC (spatial correlation treated via accounting for clustering)
 alex_data <- alex_data[order(alex_data$Id),]
@@ -299,15 +312,17 @@ cat("
     model{
     #### #the normal likelihood for the data
     for(i in 1: N){
-    mu[i] <-  beta[1] + beta[2]*Elevation[i] + beta[3]*Temp[i] + beta[4]*MC[i]
+      #you didn't add the random effect b[Id[i]]
+      mu[i] <-  beta[2]*Elevation[i] + beta[3]*Temp[i] + beta[4]*MC[i] + 
+                b[Id[i]]
     
-    y[i] ~ dnorm(mu[i], tau)
-      res[i]=y[i]-mu[i]
+      y[i] ~ dnorm(mu[i], tau)
+      res[i] <- y[i]-mu[i]
     }
     
     #the cluster random effects
     for(j in 1:J){
-    b[j] ~ dnorm(beta[1], tau.b)
+      b[j] ~ dnorm(beta[1], tau.b)
     }
     
     #priors for the population parameters
@@ -318,7 +333,7 @@ cat("
     #priors for the population parameters
     #prior for the betas
     for(i in 1:4){
-    beta[i] ~ dnorm(0.0, 1.0E-5)
+      beta[i] ~ dnorm(0.0, 1.0E-5)
     }
     
     #prior for the random effect parameters
@@ -330,13 +345,14 @@ cat("
     #cluster1
     icc <- sigma.b / (sigma.b + sigma_y)
     
-  ######fit resiuals###########
-    fit=res[]
+  ######fit resiuals########### not needed again
+    #fit=res[]
     
    
-    }", file =  "C:/Users/user/Documents/kas/sp/ThermalC_bayesian.bug")
+    }", file =  "ThermalC_bayesian.bug")
 
 thermalCdata <- list(N = nrow(alex_data),
+                     Id = alex_data$Id,
                      y = alex_data$Thermal.C,
                      Elevation = alex_data$Elevation,
                      Temp = alex_data$Temp,
@@ -349,9 +365,10 @@ thermalCini <- list(list(beta = c(0.9, 0.002, 0.03, 1.59), sigma_y=0.12,
                     list(beta = c(0.9, 0.002, 0.03, 1.59)/2, sigma_y=0.12/2, 
                          sigma.b = 0.12/2))
 
-thermalC_bayesian <- run.jags(model =  "C:/Users/user/Documents/kas/sp/ThermalC_bayesian.bug",
-                              monitor=c("beta", "sigma_y", "sigma.b","fit", "icc"),
-                              data = thermalCdata, inits = thermalCini, n.chains = 2,
+thermalC_bayesian <- run.jags(model =  "ThermalC_bayesian.bug",
+                              monitor=c("beta", "sigma_y", "sigma.b","res", "icc"),
+                              data = thermalCdata, inits = thermalCini, 
+                              n.chains = 2,
                               sample = 50000, burnin = 50000,
                               thin = 15, adapt = 40000,
                               method = "rjags", jags.refresh = 10)
@@ -359,7 +376,7 @@ thermalC_bayesian
 
 ```
 
-###s.H
+### s.H
 
 
 
