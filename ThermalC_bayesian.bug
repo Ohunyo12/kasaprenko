@@ -1,0 +1,42 @@
+
+    model{
+    #### #the normal likelihood for the data
+    for(i in 1: N){
+      #you didn't add the random effect b[Id[i]]
+      mu[i] <-  beta[2]*Elevation[i] + beta[3]*Temp[i] + beta[4]*MC[i] + 
+                b[Id[i]]
+    
+      y[i] ~ dnorm(mu[i], tau)
+      res[i] <- y[i]-mu[i]
+    }
+    
+    #the cluster random effects
+    for(j in 1:J){
+      b[j] ~ dnorm(beta[1], tau.b)
+    }
+    
+    #priors for the population parameters
+    #variance
+    tau <- pow(sigma_y, -2) #converting a precision
+    sigma_y ~ dunif(0, 20) #sampling a standard deviation
+    
+    #priors for the population parameters
+    #prior for the betas
+    for(i in 1:4){
+      beta[i] ~ dnorm(0.0, 1.0E-5)
+    }
+    
+    #prior for the random effect parameters
+    #variance between clusters
+    tau.b <- pow(sigma.b, -2) #converting it to a precision
+    sigma.b ~ dunif(0, 20) #sampling a standard deviation
+    
+    ###Intra cluster correlation
+    #cluster1
+    icc <- sigma.b / (sigma.b + sigma_y)
+    
+  ######fit resiuals########### not needed again
+    #fit=res[]
+    
+   
+    }
