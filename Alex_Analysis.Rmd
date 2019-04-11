@@ -467,55 +467,46 @@ knitr::kable(SH1_bayesian$summaries[1:7, c(1:5)])
 
 ### Bayesian Linear Regression  of Thermal.D (without clustering, missing observation and no heteroscedasticity)
 ```{r, Thermal.D}
-###normal assumption for Thermal.D
+##The Beta regression approach is to reparameterize in terms of mu and phi where mu will be equivalent to y_hat that we predict.In this parameterization you will have alpha=mu*phi and Beta=(1-mu)*phi. You can model mu as the logit of the linear combination
+#Bayesian Linear Regression (without clustering and heteroscedasticity)
+#normal assumption for Thermal.C
 cat("
     model{
-    #### #the Beta likelihood for the data
-    for(i in 1: N) {
-      mu[i] <-  beta[1] + beta[2]*Elevation[i] + beta[3]*Temp[i] + beta[4]*MC[i]
-      y[i] ~ dnorm(mu[i], tau)
-    
-      res[i] <- y[i]-mu[i]
-}	
-    
-    #priors for the population parameters
-    #variance
-    tau <- pow(sigma_y, -2) #converting a precision
-    sigma_y ~ dunif(0, 20) #sampling a standard deviation
-    
-    #prior for the betas
-    for(i in 1:4) {
-    beta[i] ~ dnorm(0.0, 1.0E-5)
+    #### #the normal likelihood for the data
+    for(i in 1: N){
+    y[i] ~ dbeta(alpha[i], beta[i])
+    alpha[i]= mu[i]*phi
+    beta[i]=(1-mu[i])*phi
+    logit(mu[i])=b[1] + b[2]*Elevation[i] + b[3]*Temp[i] + b[4]*MC[i]
+
     }
     
+    #priors for the population parameters
+   phi~dgamma(0.1,0.1)
     
-}",
-    file = "ThermalC_bayesian.bug")
+    #prior for the betas
+    for(i in 1:4){
+    b[i] ~ dnorm(0.0, 1.0E-5)
+    }
+    
+    }",
+    file = "C:/Users/user/Documents/kas/sp/ThermalC_bayesian.bug")
 
-thermalCdata <- list(N = nrow(alex_data),
-                     y = alex_data$Thermal.C,
-                     Elevation = alex_data$Elevation,
-                     Temp = alex_data$Temp,
-                     MC = alex_data$M.C
+thermalDdata <- list(N = nrow(alex_data1),
+                     y = alex_data1$Thermal.D,
+                     Elevation = alex_data1$Elevation,
+                     Temp = alex_data1$Temp,
+                     MC = alex_data1$M.C
 )
 
-thermalCini <- list(list(beta = c(0.9, 0.002, 0.03, 1.59), sigma_y = 0.12),
-                    list(beta = c(0.9, 0.002, 0.03, 1.59)/2, sigma_y = 0.12/2))
+thermalDini <- list(list(b = c(0.9, 0.002, 0.03, 1.59), phi = 0.12),
+                    list(b = c(0.9, 0.002, 0.03, 1.59)/2, phi = 0.12/2))
 
-thermalC_bayesian <- run.jags(model = "ThermalC_bayesian.bug",
-                              monitor=c("beta", "sigma_y","res"),
-                              data = thermalCdata, inits = thermalCini, n.chains = 2,
+thermalD_bayesian <- run.jags(model = "C:/Users/user/Documents/kas/sp/ThermalC_bayesian.bug",
+                              monitor=c("b", "phi"),
+                              data = thermalDdata, inits = thermalDini, n.chains = 2,
                               sample = 30000, burnin = 20000,
                               thin = 15, adapt = 40000,
                               method = "rjags", jags.refresh = 10)
-
-###The posterior summary checks?
-plot(thermalC_bayesian, "trace", vars = c("beta", "sigma_y"))
-plot(thermalC_bayesian, "autocorr", vars = c("beta", "sigma_y"))
-dic_thermalC<- extract(thermalC_bayesian, what = "dic")
-dic_thermalC
-
-```
-```{r}
-knitr::kable(thermalC_bayesian$summaries[1:5, c(1:5)])
+thermalD_bayesian
 ```
