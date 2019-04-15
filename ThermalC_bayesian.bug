@@ -1,0 +1,22 @@
+
+    model{
+    #### #the Beta likelihood for the data
+    for(i in 1: N) {
+      mu[i] <-  beta[1] + beta[2]*Elevation[i] + beta[3]*Temp[i] + beta[4]*MC[i]
+      y[i] ~ dnorm(mu[i], tau)
+    
+      res[i] <- y[i]-mu[i]
+}	
+    
+    #priors for the population parameters
+    #variance
+    tau <- pow(sigma_y, -2) #converting a precision
+    sigma_y ~ dunif(0, 20) #sampling a standard deviation
+    
+    #prior for the betas
+    for(i in 1:4) {
+    beta[i] ~ dnorm(0.0, 1.0E-5)
+    }
+    
+    
+}
