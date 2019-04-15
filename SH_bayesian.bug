@@ -1,9 +1,9 @@
 
     model{
-    #### #the Beta likelihood for the data
+    #### #the normal likelihood for the data
     for(i in 1: N) {
       mu[i] <-  beta[1] + beta[2]*Elevation[i] + beta[3]*Temp[i] + beta[4]*MC[i]
-      y[i] ~ dnorm(mu[i], tau)
+      y[i] ~ dlnorm(mu[i], tau)
     
       res[i] <- y[i]-mu[i]
 }	
@@ -17,6 +17,6 @@
     for(i in 1:4) {
     beta[i] ~ dnorm(0.0, 1.0E-5)
     }
-    
+
     
 }
