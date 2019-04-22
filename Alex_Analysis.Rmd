@@ -768,7 +768,7 @@ cat("
     #### #the normal likelihood for the data
     for(i in 1: N) {
       mu[i] <-  beta[2]*Elevation[i] + beta[3]*Temp[i] + beta[4]*MC[i] + sx[i]
-      y[i] ~ dnorm(mu[i], tau)
+      y[i] ~ dlnorm(mu[i], tau)
   
     }
     
@@ -787,7 +787,7 @@ cat("
     file = "thermal_spbayesian.bug")
 
 SHdata <- list(N = nrow(alex_data),
-                     y = alex_data$SH,
+                     y = alex_data$S.H,
                      u = vvs_SH$u,
                      vu = vvs_SH$v,
                      uvec = vvs_SH$uvec,
@@ -1027,7 +1027,7 @@ cat("
 
 SHdata <- list(N = nrow(alex_data),
                      Id = alex_data$Id,
-                     y = alex_data$SH,
+                     y = alex_data$S.H,
                      u = vvs_SH$u,
                      vu = vvs_SH$v,
                      uvec = vvs_SH$uvec,

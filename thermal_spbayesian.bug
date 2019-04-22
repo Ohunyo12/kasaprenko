@@ -22,7 +22,7 @@
     #### #the normal likelihood for the data
     for(i in 1: N) {
       mu[i] <-  beta[2]*Elevation[i] + beta[3]*Temp[i] + beta[4]*MC[i] + sx[i]
-      y[i] ~ dnorm(mu[i], tau)
+      y[i] ~ dlnorm(mu[i], tau)
   
     }
     
