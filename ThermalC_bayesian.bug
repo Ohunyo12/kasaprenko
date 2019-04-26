@@ -6,7 +6,7 @@
       mu[i] <-  beta[2]*Elevation[i] + beta[3]*Temp[i] + beta[4]*MC[i] + 
                 b[Id[i]]
     
-      y[i] ~ dnorm(mu[i], tau)
+      y[i] ~ dlnorm(mu[i], tau)
       res[i] <- y[i] - mu[i]
     }
     

@@ -1065,9 +1065,744 @@ dic_SH_spclust
 knitr::kable(SH_bayesian_spclust$summaries[1:11, c(1:5)])
 ```
 
+## Bayesian Linear Regression (without cluster 4,5 and heteroscedasticity)
+
+### Thermal.C
+
+
+```{r Thermal.C5, cache=T}
+###normal assumption for Thermal.C
+alex_data2=alex_data[!alex_data$Id%in%c(4,5),] #We filtered out cluster 4 and 5
+cat("
+    model{
+    #### #the normal likelihood for the data
+    for(i in 1: N) {
+      mu[i] <-  beta[1] + beta[2]*Elevation[i] + beta[3]*Temp[i] + beta[4]*MC[i]
+      y[i] ~ dnorm(mu[i], tau)
+    
+      res[i] <- y[i]-mu[i]
+}	
+    
+    #priors for the population parameters
+    #variance
+    tau <- pow(sigma_y, -2) #converting a precision
+    sigma_y ~ dunif(0, 20) #sampling a standard deviation
+    
+    #prior for the betas
+    for(i in 1:4) {
+    beta[i] ~ dnorm(0.0, 1.0E-5)
+    }
+    
+    
+}",
+    file = "ThermalC_bayesian.bug")
+
+thermalCdata <- list(N = nrow(alex_data2),
+                     y = alex_data2$Thermal.C,
+                     Elevation = alex_data2$Elevation,
+                     Temp = alex_data2$Temp,
+                     MC = alex_data2$M.C
+)
+
+thermalCini <- list(list(beta = c(0.9, 0.002, 0.03, 1.59), sigma_y = 0.12),
+                    list(beta = c(0.9, 0.002, 0.03, 1.59)/2, sigma_y = 0.12/2))
+
+thermalC2_bayesian_noclust <- run.jags(model = "ThermalC_bayesian.bug",
+                              monitor=c("beta", "sigma_y","res"),
+                              data = thermalCdata, inits = thermalCini, n.chains = 2,
+                              sample = 30000, burnin = 20000,
+                              thin = 15, adapt = 40000,
+                              method = "rjags", jags.refresh = 10)
+
+###The posterior summary checks?
+plot(thermalC2_bayesian_noclust, "trace", vars = c("beta", "sigma_y"))
+plot(thermalC2_bayesian_noclust, "autocorr", vars = c("beta", "sigma_y"))
+dic_thermalC2_noclust <- extract(thermalC2_bayesian_noclust, what = "dic")
+dic_thermalC2_noclust
+```
 
 
 
+```{r}
+knitr::kable(thermalC2_bayesian_noclust$summaries[1:5, c(1:5)])
+```
+
+
+
+
+
+
+
+
+## Spatial Model without cluster 4 and 5 data
+
+### Variogram for Thermal C Based on Bayesian-Linear Regression Model
+
+```{r }
+thermalC_res1 <- thermalC2_bayesian_noclust$summaries[str_detect(row.names(thermalC2_bayesian_noclust$summaries), "res"), "Mean"]
+thermalC_gdata <- as.geodata(cbind(alex_data2$Longitude, alex_data2$latitude, thermalC_res1))
+
+### varogram across all clusters (we can just keep this)
+dd_matrix <- as.matrix(dist(alex_data[, 2:3], diag = T, upper = T))
+vvs_thermalC <- variog(thermalC_gdata, uvec = quantile(unique(as.numeric(dd_matrix)), seq(0, 1, 0.01)), option = "bin")
+plot(vvs_thermalC, type="p", pch=19, col = 2,cex.lab = 1.3,
+             main = "", 
+             ylab = expression(v(u)), lwd = 2 )
+
+```
+
+
+### Thermal.C
+
+```{r ThermalC6, cache=T}
+alex_data2=alex_data[!alex_data$Id%in%c(4,5),]
+cat("
+    model{
+    #### prior for the variogram model
+    phi ~ dunif(0, 10)
+    tetha1 ~ dunif(0, 10) #sill
+
+    tetha12 ~ dunif(0, 20) #standard deviation tau
+    tau2 <- pow(tetha12, -2) #precision = 1/tau2
+
+    #semi-variogram model (defining the likelihood of the semi-variogram model)
+      for(k in 1 : N2){
+        mu_v[k] <- tetha1 * (1 - exp(- u[k] / phi))
+        vu[k] ~ dnorm(mu_v[k], tau2) 
+      }
+      
+      #sampling s(x) from the variogram model
+      for(i in 1: N){
+        mu_vnew[i] <- tetha1 * (1 - exp(- uvec[i] / phi))
+        sx[i] ~ dnorm(mu_vnew[i], tau2)
+      }
+      
+    #### #the normal likelihood for the data
+    for(i in 1: N) {
+      mu[i] <-  beta[2]*Elevation[i] + beta[3]*Temp[i] + beta[4]*MC[i] + sx[i]
+      y[i] ~ dnorm(mu[i], tau)
+  
+    }
+    
+    #priors for the population parameters
+    #variance
+    tau <- pow(sigma_y, -2) #converting a precision
+    sigma_y ~ dunif(0, 20) #sampling a standard deviation
+    
+    #priors for the population parameters
+    #prior for the betas
+    for(i in 1:4) {
+      beta[i] ~ dnorm(0.0, 1.0E-5)
+    }
+    
+  }",
+    file = "thermal_spbayesian.bug")
+
+thermalCdata <- list(N = nrow(alex_data2),
+                     y = alex_data2$Thermal.C,
+                     u = vvs_thermalC$u,
+                     vu = vvs_thermalC$v,
+                     uvec = vvs_thermalC$uvec,
+                     N2 = length(vvs_thermalC$u),
+                     Elevation = alex_data2$Elevation,
+                     Temp = alex_data2$Temp,
+                     MC = alex_data2$M.C
+)
+
+thermalCini <- list(list(beta = c(0.9, 0.002, 0.03, 1.59), sigma_y=0.12, 
+                         tetha1 = 0.5, phi = 1.0, tetha12 = 1.23),
+                    list(beta = c(0.9, 0.002, 0.03, 1.59)/2, sigma_y=0.12/2, 
+                         tetha1 = 0.5/2, phi = 1.0/2, tetha12 = 1.23/2)
+                    )
+
+thermalC2_bayesian_sp <- run.jags(model =  "thermal_spbayesian.bug",
+                              monitor=c("beta", "sigma_y", "tetha1", "tetha12", "phi"),
+                              data = thermalCdata, inits = thermalCini, 
+                              n.chains = 2,
+                              sample = 50000, burnin = 50000,
+                              thin = 15, adapt = 40000,
+                              method = "rjags", jags.refresh = 10)
+thermalC2_bayesian_sp
+plot(thermalC2_bayesian_sp, "trace", vars = c("beta", "sigma_y", "tetha1", "tetha12", "phi"))
+plot(thermalC2_bayesian_sp, "autocorr", vars = c("beta", "sigma_y", "tetha1", "tetha12", "phi"))
+dic_thermalC2_sp <- extract(thermalC2_bayesian_sp, what = "dic")
+dic_thermalC2_sp 
+```
+
+
+```{r}
+knitr::kable(thermalC2_bayesian_sp$summaries[1:8, c(1:5)])
+```
+
+##CLUSTER MODEL  
+##Thermal.C  without 4 and 5 clusters
+
+```{r ThermalC7, cache=T}
+#Bayesian random effect model for Thermal C (spatial correlation treated via accounting for clustering)
+#normal assumption for thermal C
+cat("
+    model{
+    #### #the normal likelihood for the data
+    for(i in 1: N){
+      
+      mu[i] <-  beta[2]*Elevation[i] + beta[3]*Temp[i] + beta[4]*MC[i] + 
+                b[Id[i]]
+    
+      y[i] ~ dnorm(mu[i], tau)
+      res[i] <- y[i] - mu[i]
+    }
+    
+    #the cluster random effects
+    for(j in 1:J) {
+      b[j] ~ dnorm(beta[1], tau.b)
+    }
+    
+    #priors for the population parameters
+    #variance
+    tau <- pow(sigma_y, -2) #converting a precision
+    sigma_y ~ dunif(0, 20) #sampling a standard deviation
+    
+    #priors for the population parameters
+    #prior for the betas
+    for(i in 1:4) {
+      beta[i] ~ dnorm(0.0, 1.0E-5)
+    }
+    
+    #prior for the random effect parameters
+    #variance between clusters
+    tau.b <- pow(sigma.b, -2) #converting it to a precision
+    sigma.b ~ dunif(0, 20) #sampling a standard deviation
+    
+    ###Intra cluster correlation
+  
+    icc <- sigma.b / (sigma.b + sigma_y)
+    
+    
+    }", file =  "ThermalC_bayesian.bug")
+
+thermalC2data <- list(N = nrow(alex_data2),
+                     Id = alex_data2$Id,
+                     y = alex_data2$Thermal.C,
+                     Elevation = alex_data2$Elevation,
+                     Temp = alex_data2$Temp,
+                     MC = alex_data2$M.C,
+                     J = length(unique(alex_data2$Id))
+)
+
+thermalC2ini <- list(list(beta = c(0.9, 0.002, 0.03, 1.59), sigma_y=0.12, 
+                         sigma.b = 0.12),
+                    list(beta = c(0.9, 0.002, 0.03, 1.59)/2, sigma_y=0.12/2, 
+                         sigma.b = 0.12/2))
+
+thermalC2W_bayesian_clust <- run.jags(model =  "ThermalC_bayesian.bug",
+                              monitor=c("beta", "sigma_y", "sigma.b","icc","res"),
+                              data = thermalC2data, inits = thermalC2ini, 
+                              n.chains = 2,
+                              sample = 50000, burnin = 50000,
+                              thin = 15, adapt = 40000,
+                              method = "rjags", jags.refresh = 10)
+
+###The posterior summary checks?
+plot(thermalC2W_bayesian_clust, "trace", vars = c("beta", "sigma_y","sigma.b","icc"))
+plot(thermalC2W_bayesian_clust, "autocorr", vars = c("beta", "sigma_y","sigma.b","icc"))
+dic_thermalC2W_clust <- extract(thermalC2W_bayesian_clust, what = "dic")
+dic_thermalC2W_clust
+```
+
+```{r}
+knitr::kable(thermalC2W_bayesian_clust$summaries[1:7, c(1:5)])
+```
+
+## Spatial-Cluster Model
+
+### Variogram for Thermal C Based on Clustered-Data Model
+
+```{r}
+thermalC_res <- thermalC2W_bayesian_clust$summaries[str_detect(row.names(thermalC2W_bayesian_clust$summaries), "res"), "Mean"]
+thermalC2W_gdata <- as.geodata(cbind(alex_data2$Longitude, alex_data2$latitude, thermalC_res))
+
+### varogram across all clusters (we can just keep this)
+dd_matrix <- as.matrix(dist(alex_data[, 2:3], diag = T, upper = T))
+vvs_thermalC2W <- variog(thermalC2W_gdata, uvec = quantile(unique(as.numeric(dd_matrix)), seq(0, 1, 0.01)), option = "bin")
+plot(vvs_thermalC2W, type="p", pch=19, col = 2,cex.lab = 1.3,
+             main = "", 
+             ylab = expression(v(u)), lwd = 2 )
+
+```
+
+### Thermal C spatial cluster model without cluster 4 and 5 data
+
+```{r ThermalC8, cache=T}
+alex_data2=alex_data[!alex_data$Id%in%c(4,5),]
+cat("
+    model{
+    #### prior for the variogram model
+    phi ~ dunif(0, 10)
+    tetha1 ~ dunif(0, 10) #sill
+
+    tetha12 ~ dunif(0, 20) #standard deviation tau
+    tau2 <- pow(tetha12, -2) #precision = 1/tau2
+
+    #semi-variogram model (defining the likelihood of the semi-variogram model)
+      for(k in 1 : N2){
+        mu_v[k] <- tetha1 * (1 - exp(- u[k] / phi))
+        vu[k] ~ dnorm(mu_v[k], tau2) 
+      }
+      
+      #sampling s(x) from the variogram model
+      for(i in 1: N){
+        mu_vnew[i] <- tetha1 * (1 - exp(- uvec[i] / phi))
+        sx[i] ~ dnorm(mu_vnew[i], tau2)
+      }
+      
+    #### #the normal likelihood for the data
+    for(i in 1: N){
+      #you didn't add the random effect b[Id[i]]
+      mu[i] <-  beta[2]*Elevation[i] + beta[3]*Temp[i] + beta[4]*MC[i] + 
+                b[Id[i]] + sx[i]
+    
+      y[i] ~ dnorm(mu[i], tau)
+      res[i] <- y[i] - mu[i]
+    }
+    
+    #the cluster random effects
+    for(j in 1:J) {
+      b[j] ~ dnorm(beta[1], tau.b)
+    }
+    
+    #priors for the population parameters
+    #variance
+    tau <- pow(sigma_y, -2) #converting a precision
+    sigma_y ~ dunif(0, 20) #sampling a standard deviation
+    
+    #priors for the population parameters
+    #prior for the betas
+    for(i in 1:4) {
+      beta[i] ~ dnorm(0.0, 1.0E-5)
+    }
+    
+    #prior for the random effect parameters
+    #variance between clusters
+    tau.b <- pow(sigma.b, -2) #converting it to a precision
+    sigma.b ~ dunif(0, 20) #sampling a standard deviation
+    
+    ###Intra cluster correlation
+  
+    icc <- sigma.b / (sigma.b + sigma_y)
+    
+    #ratio of variotion due to cluster and that due to spatial correlation
+    sp_clus <- tetha12 / sigma.b
+    
+    }",
+    file = "thermal_spclustbayesian.bug")
+
+thermalC2data <- list(N = nrow(alex_data2),
+                     Id = alex_data2$Id,
+                     y = alex_data2$Thermal.C,
+                     u = vvs_thermalC2W$u,
+                     vu = vvs_thermalC2W$v,
+                     uvec = vvs_thermalC2W$uvec,
+                     N2 = length(vvs_thermalC$u),
+                     Elevation = alex_data2$Elevation,
+                     Temp = alex_data2$Temp,
+                     MC = alex_data2$M.C,
+                     J = length(unique(alex_data2$Id))
+)
+
+thermalC2ini <- list(list(beta = c(0.9, 0.002, 0.03, 1.59), sigma_y=0.12, 
+                         sigma.b = 0.12, tetha1 = 0.5, phi = 1.0, tetha12 = 1.23),
+                    list(beta = c(0.9, 0.002, 0.03, 1.59)/2, sigma_y=0.12/2, 
+                         sigma.b = 0.12/2 , tetha1 = 0.5/2, phi = 1.0/2, tetha12 = 1.23/2)
+                    )
+
+thermalC2W_bayesian_spclust <- run.jags(model =  "thermal_spclustbayesian.bug",
+                              monitor=c("beta", "sigma_y", "sigma.b","icc","tetha1", "tetha12", "phi", "sp_clus"),
+                              data = thermalC2data, inits = thermalC2ini, 
+                              n.chains = 2,
+                              sample = 50000, burnin = 50000,
+                              thin = 15, adapt = 40000,
+                              method = "rjags", jags.refresh = 10)
+
+###The posterior summary checks?
+plot(thermalC2W_bayesian_spclust, "trace", vars = c("beta", "sigma_y", "sigma.b","icc","tetha1", "tetha12", "phi", "sp_clus"))
+plot(thermalC2W_bayesian_spclust, "autocorr", vars = c("beta", "sigma_y", "sigma.b","icc","tetha1", "tetha12", "phi", "sp_clus"))
+dic_thermalC2W_spclust <- extract(thermalC2W_bayesian_spclust, what = "dic")
+dic_thermalC2W_spclust
+
+```
+
+
+```{r}
+knitr::kable(thermalC2W_bayesian_spclust$summaries[1:11, c(1:5)])
+```
+
+## Bayesian Linear Regression (without 4, 5 clusters and heteroscedasticity)
+
+### S.H
+alex_data2=alex_data[!alex_data$Id%in%c(4,5),] #We filtered out cluster 4 and 5
+
+```{r S.H5, cache=T}
+###normal assumption for S.H
+cat("
+    model{
+    #### #the normal likelihood for the data
+    for(i in 1: N) {
+      mu[i] <-  beta[1] + beta[2]*Elevation[i] + beta[3]*Temp[i] + beta[4]*MC[i]
+      y[i] ~ dlnorm(mu[i], tau)
+    
+      res[i] <- y[i]-mu[i]
+}	
+    
+    #priors for the population parameters
+    #variance
+    tau <- pow(sigma_y, -2) #converting a precision
+    sigma_y ~ dunif(0, 20) #sampling a standard deviation
+    
+    #prior for the betas
+    for(i in 1:4) {
+    beta[i] ~ dnorm(0.0, 1.0E-5)
+    }
+    
+    
+}",
+    file = "ThermalC_bayesian.bug")
+
+SHdata <- list(N = nrow(alex_data2),
+                     y = alex_data2$S.H,
+                     Elevation = alex_data2$Elevation,
+                     Temp = alex_data2$Temp,
+                     MC = alex_data2$M.C
+)
+
+SHini <- list(list(beta = c(0.9, 0.002, 0.03, 1.59), sigma_y = 0.12),
+                    list(beta = c(0.9, 0.002, 0.03, 1.59)/2, sigma_y = 0.12/2))
+
+SH2_bayesian_noclust <- run.jags(model = "ThermalC_bayesian.bug",
+                              monitor=c("beta", "sigma_y","res"),
+                              data = SHdata, inits = SHini, n.chains = 2,
+                              sample = 30000, burnin = 20000,
+                              thin = 15, adapt = 40000,
+                              method = "rjags", jags.refresh = 10)
+
+###The posterior summary checks?
+plot(SH2_bayesian_noclust, "trace", vars = c("beta", "sigma_y"))
+plot(SH2_bayesian_noclust, "autocorr", vars = c("beta", "sigma_y"))
+dic_SH2_noclust <- extract(SH2_bayesian_noclust, what = "dic")
+dic_SH2_noclust
+```
+
+
+
+```{r}
+knitr::kable(SH2_bayesian_noclust$summaries[1:5, c(1:5)])
+```
+
+
+## Spatial Model without cluster 4 and 5 data
+
+### Variogram for S.H Based on Bayesian-Linear Regression Model
+
+```{r }
+alex_data2=alex_data[!alex_data$Id%in%c(4,5),] #We filtered out cluster 4 and 5
+SH_res1 <- SH2_bayesian_noclust$summaries[str_detect(row.names(SH2_bayesian_noclust$summaries), "res"), "Mean"]
+SH_gdata <- as.geodata(cbind(alex_data2$Longitude, alex_data2$latitude, SH_res1))
+
+### varogram across all clusters (we can just keep this)
+dd_matrix <- as.matrix(dist(alex_data[, 2:3], diag = T, upper = T))
+vvs_SH<- variog(SH_gdata, uvec = quantile(unique(as.numeric(dd_matrix)), seq(0, 1, 0.01)), option = "bin")
+plot(vvs_SH, type="p", pch=19, col = 2,cex.lab = 1.3,
+             main = "", 
+             ylab = expression(v(u)), lwd = 2 )
+
+```
+
+
+### SH
+
+```{r SH6, cache=T}
+alex_data2=alex_data[!alex_data$Id%in%c(4,5),]
+cat("
+    model{
+    #### prior for the variogram model
+    phi ~ dunif(0, 10)
+    tetha1 ~ dunif(0, 10) #sill
+
+    tetha12 ~ dunif(0, 20) #standard deviation tau
+    tau2 <- pow(tetha12, -2) #precision = 1/tau2
+
+    #semi-variogram model (defining the likelihood of the semi-variogram model)
+      for(k in 1 : N2){
+        mu_v[k] <- tetha1 * (1 - exp(- u[k] / phi))
+        vu[k] ~ dnorm(mu_v[k], tau2) 
+      }
+      
+      #sampling s(x) from the variogram model
+      for(i in 1: N){
+        mu_vnew[i] <- tetha1 * (1 - exp(- uvec[i] / phi))
+        sx[i] ~ dnorm(mu_vnew[i], tau2)
+      }
+      
+    #### #the normal likelihood for the data
+    for(i in 1: N) {
+      mu[i] <-  beta[2]*Elevation[i] + beta[3]*Temp[i] + beta[4]*MC[i] + sx[i]
+      y[i] ~ dlnorm(mu[i], tau)
+  
+    }
+    
+    #priors for the population parameters
+    #variance
+    tau <- pow(sigma_y, -2) #converting a precision
+    sigma_y ~ dunif(0, 20) #sampling a standard deviation
+    
+    #priors for the population parameters
+    #prior for the betas
+    for(i in 1:4) {
+      beta[i] ~ dnorm(0.0, 1.0E-5)
+    }
+    
+  }",
+    file = "thermal_spbayesian.bug")
+
+SHdata <- list(N = nrow(alex_data2),
+                     y = alex_data2$S.H,
+                     u = vvs_SH$u,
+                     vu = vvs_SH$v,
+                     uvec = vvs_SH$uvec,
+                     N2 = length(vvs_SH$u),
+                     Elevation = alex_data2$Elevation,
+                     Temp = alex_data2$Temp,
+                     MC = alex_data2$M.C
+)
+
+SHini <- list(list(beta = c(0.9, 0.002, 0.03, 1.59), sigma_y=0.12, 
+                         tetha1 = 0.5, phi = 1.0, tetha12 = 1.23),
+                    list(beta = c(0.9, 0.002, 0.03, 1.59)/2, sigma_y=0.12/2, 
+                         tetha1 = 0.5/2, phi = 1.0/2, tetha12 = 1.23/2)
+                    )
+
+SH2_bayesian_sp <- run.jags(model =  "thermal_spbayesian.bug",
+                              monitor=c("beta", "sigma_y", "tetha1", "tetha12", "phi"),
+                              data = SHdata, inits = SHini, 
+                              n.chains = 2,
+                              sample = 50000, burnin = 50000,
+                              thin = 15, adapt = 40000,
+                              method = "rjags", jags.refresh = 10)
+SH2_bayesian_sp
+plot(SH2_bayesian_sp, "trace", vars = c("beta", "sigma_y", "tetha1", "tetha12", "phi"))
+plot(SH2_bayesian_sp, "autocorr", vars = c("beta", "sigma_y", "tetha1", "tetha12", "phi"))
+dic_SH2_sp <- extract(SH2_bayesian_sp, what = "dic")
+dic_SH2_sp 
+```
+
+
+```{r}
+knitr::kable(SH2_bayesian_sp$summaries[1:8, c(1:5)])
+```
+
+### S.H  cluster model without cluster 4 and 5 data
+
+```{r SbH7, cache=T}
+alex_data2=alex_data[!alex_data$Id%in%c(4,5),]
+#Bayesian random effect model for Thermal C (spatial correlation treated via accounting for clustering)
+#normal assumption for thermal C
+cat("
+    model{
+    #### #the normal likelihood for the data
+    for(i in 1: N){
+      
+      mu[i] <-  beta[2]*Elevation[i] + beta[3]*Temp[i] + beta[4]*MC[i] + 
+                b[Id[i]]
+    
+      y[i] ~ dlnorm(mu[i], tau)
+      res[i] <- y[i] - mu[i]
+    }
+    
+    #the cluster random effects
+    for(j in 1:J) {
+      b[j] ~ dnorm(beta[1], tau.b)
+    }
+    
+    #priors for the population parameters
+    #variance
+    tau <- pow(sigma_y, -2) #converting a precision
+    sigma_y ~ dunif(0, 20) #sampling a standard deviation
+    
+    #priors for the population parameters
+    #prior for the betas
+    for(i in 1:4) {
+      beta[i] ~ dnorm(0.0, 1.0E-5)
+    }
+    
+    #prior for the random effect parameters
+    #variance between clusters
+    tau.b <- pow(sigma.b, -2) #converting it to a precision
+    sigma.b ~ dunif(0, 20) #sampling a standard deviation
+    
+    ###Intra cluster correlation
+  
+    icc <- sigma.b / (sigma.b + sigma_y)
+    
+    
+    }", file =  "ThermalC_bayesian.bug")
+
+SH2data <- list(N = nrow(alex_data2),
+                     Id = alex_data2$Id,
+                     y = alex_data2$S.H,
+                     Elevation = alex_data2$Elevation,
+                     Temp = alex_data2$Temp,
+                     MC = alex_data2$M.C,
+                     J = length(unique(alex_data2$Id))
+)
+
+SH2ini <- list(list(beta = c(0.9, 0.002, 0.03, 1.59), sigma_y=0.12, 
+                         sigma.b = 0.12),
+                    list(beta = c(0.9, 0.002, 0.03, 1.59)/2, sigma_y=0.12/2, 
+                         sigma.b = 0.12/2))
+
+SH2W_bayesian_clust <- run.jags(model =  "ThermalC_bayesian.bug",
+                              monitor=c("beta", "sigma_y", "sigma.b","icc","res"),
+                              data = SH2data, inits = SH2ini, 
+                              n.chains = 2,
+                              sample = 50000, burnin = 50000,
+                              thin = 15, adapt = 40000,
+                              method = "rjags", jags.refresh = 10)
+
+###The posterior summary checks?
+plot(SH2W_bayesian_clust, "trace", vars = c("beta", "sigma_y","sigma.b","icc"))
+plot(SH2W_bayesian_clust, "autocorr", vars = c("beta", "sigma_y","sigma.b","icc"))
+dic_SH2W_clust <- extract(SH2W_bayesian_clust, what = "dic")
+dic_SH2W_clust
+```
+
+```{r}
+knitr::kable(SH2W_bayesian_clust$summaries[1:7, c(1:5)])
+```
+
+## Spatial-Cluster Model
+
+### Variogram for S.H Based on Clustered-Data Model
+
+```{r}
+SH2W_res <- SH2W_bayesian_clust$summaries[str_detect(row.names(SH2W_bayesian_clust$summaries), "res"), "Mean"]
+SH2W_gdata <- as.geodata(cbind(alex_data2$Longitude, alex_data2$latitude, SH2W_res))
+
+### varogram across all clusters (we can just keep this)
+dd_matrix <- as.matrix(dist(alex_data[, 2:3], diag = T, upper = T))
+vvs_SH2W <- variog(SH2W_gdata, uvec = quantile(unique(as.numeric(dd_matrix)), seq(0, 1, 0.01)), option = "bin")
+plot(vvs_SH2W, type="p", pch=19, col = 2,cex.lab = 1.3,
+             main = "", 
+             ylab = expression(v(u)), lwd = 2 )
+
+```
+
+### S.H without 4 and 5 clusters 
+
+```{r SH8, cache=T}
+alex_data2=alex_data[!alex_data$Id%in%c(4,5),]
+cat("
+    model{
+    #### prior for the variogram model
+    phi ~ dunif(0, 10)
+    tetha1 ~ dunif(0, 10) #sill
+
+    tetha12 ~ dunif(0, 20) #standard deviation tau
+    tau2 <- pow(tetha12, -2) #precision = 1/tau2
+
+    #semi-variogram model (defining the likelihood of the semi-variogram model)
+      for(k in 1 : N2){
+        mu_v[k] <- tetha1 * (1 - exp(- u[k] / phi))
+        vu[k] ~ dnorm(mu_v[k], tau2) 
+      }
+      
+      #sampling s(x) from the variogram model
+      for(i in 1: N){
+        mu_vnew[i] <- tetha1 * (1 - exp(- uvec[i] / phi))
+        sx[i] ~ dnorm(mu_vnew[i], tau2)
+      }
+      
+    #### #the normal likelihood for the data
+    for(i in 1: N){
+      #you didn't add the random effect b[Id[i]]
+      mu[i] <-  beta[2]*Elevation[i] + beta[3]*Temp[i] + beta[4]*MC[i] + 
+                b[Id[i]] + sx[i]
+    
+      y[i] ~ dlnorm(mu[i], tau)
+      res[i] <- y[i] - mu[i]
+    }
+
+    
+    #the cluster random effects
+    for(j in 1:J) {
+      b[j] ~ dnorm(beta[1], tau.b)
+    }
+    
+    #priors for the population parameters
+    #variance
+    tau <- pow(sigma_y, -2) #converting a precision
+    sigma_y ~ dunif(0, 20) #sampling a standard deviation
+    
+    #priors for the population parameters
+    #prior for the betas
+    for(i in 1:4) {
+      beta[i] ~ dnorm(0.0, 1.0E-5)
+    }
+    
+    #prior for the random effect parameters
+    #variance between clusters
+    tau.b <- pow(sigma.b, -2) #converting it to a precision
+    sigma.b ~ dunif(0, 20) #sampling a standard deviation
+    
+    ###Intra cluster correlation
+  
+    icc <- sigma.b / (sigma.b + sigma_y)
+    
+    #ratio of variotion due to cluster and that due to spatial correlation
+    sp_clus <- tetha12 / sigma.b
+    
+    }",
+    file = "thermal_spclustbayesian.bug")
+
+thermalC3Wdata <- list(N = nrow(alex_data2),
+                     Id = alex_data2$Id,
+                     y = alex_data2$S.H,
+                     u = vvs_SH2W$u,
+                     vu = vvs_SH2W$v,
+                     uvec = vvs_SH2W$uvec,
+                     N2 = length(vvs_SH2W$u),
+                     Elevation = alex_data2$Elevation,
+                     Temp = alex_data2$Temp,
+                     MC = alex_data2$M.C,
+                     J = length(unique(alex_data2$Id))
+)
+
+thermalC3Wini <- list(list(beta = c(0.9, 0.002, 0.03, 1.59), sigma_y=0.12, 
+                         sigma.b = 0.12, tetha1 = 0.5, phi = 1.0, tetha12 = 1.23),
+                    list(beta = c(0.9, 0.002, 0.03, 1.59)/2, sigma_y=0.12/2, 
+                         sigma.b = 0.12/2 , tetha1 = 0.5/2, phi = 1.0/2, tetha12 = 1.23/2)
+                    )
+
+SH3W_bayesian_spclust <- run.jags(model =  "thermal_spclustbayesian.bug",
+                              monitor=c("beta", "sigma_y", "sigma.b","icc","tetha1", "tetha12", "phi", "sp_clus"),
+                              data = thermalC3Wdata, inits = thermalC3Wini, 
+                              n.chains = 2,
+                              sample = 50000, burnin = 50000,
+                              thin = 15, adapt = 40000,
+                              method = "rjags", jags.refresh = 10)
+
+###The posterior summary checks?
+plot(SH3W_bayesian_spclust, "trace", vars = c("beta", "sigma_y", "sigma.b","icc","tetha1", "tetha12", "phi", "sp_clus"))
+plot(SH3W_bayesian_spclust, "autocorr", vars = c("beta", "sigma_y", "sigma.b","icc","tetha1", "tetha12", "phi", "sp_clus"))
+dic_SH3W_spclust <- extract(SH3W_bayesian_spclust, what = "dic")
+dic_SH3W_spclust
+
+```
+
+
+```{r}
+knitr::kable(SH3W_bayesian_spclust$summaries[1:11, c(1:5)])
+```
+
+We observed that both Spatial model and Spatial cluster model with all the five clusters for Thermal Conductivity and Specfic Heat have lesser DIC  compared to models without cluster 4 and 5 respectively.
 
 
 
