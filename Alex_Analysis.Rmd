@@ -268,7 +268,15 @@ dic_thermalC_noclust
 
 ```{r}
 knitr::kable(thermalC_bayesian_noclust$summaries[1:5, c(1:5)])
+####plotting the credible interval
+toplot_thermalc_noclust <- as.data.frame(thermalC_bayesian_noclust$summaries[1:4, c(1:5)])
+toplot_thermalc_noclust %>% ggplot(aes(x = c("Intercept", "Elevation", "Temperature", "Moist Content"), y = Mean))  +
+  geom_errorbar(aes(ymin = Lower95, ymax = Upper95), width = 0.1,
+                position = position_dodge(0.05), col = "darkgreen", size = 1) + geom_point(size = 4, col = "red2") + 
+  theme_minimal()
 ```
+
+
 
 ### S.H
 
@@ -334,48 +342,58 @@ knitr::kable(SH_bayesian$summaries[1:5, c(1:5)])
 #normal assumption for Thermal.C
 cat("
     model{
-    #### #the normal likelihood for the data
+    #### #the beta likelihood for the data
     for(i in 1: N){
-    y[i] ~ dbeta(alpha[i], be[i])
-    alpha[i]= mu[i]*phil
-    be[i]=(1-mu[i])*phil
-    logit(mu[i])=beta[1] + beta[2]*Elevation[i] + beta[3]*Temp[i] + beta[4]*MC[i]
+    
+    ll[i] <- loggam(phi) - loggam(phi*mu[i]) - 
+      loggam((1 - mu[i])*phi) + 
+      (mu[i]*phi - 1)*log(y[i]) + 
+      ((1 - mu[i])*phi - 1)*log(1-y[i])
+
+    logit(mu[i]) = beta[1] + beta[2]*Elevation[i] + beta[3]*Temp[i] + beta[4]*MC[i]
+    
+      #the poisson zero tricks  used because of 
+      #nonstandard likelihood #
+      constant[i] = 10000 - ll[i]
+      samp[i] ~ dpois(constant[i])
 
     }
     
     #priors for the population parameters
-   phil~dgamma(0.1,0.1)
+    phi ~ dgamma(0.001,0.001)
     
     #prior for the betas
     for(i in 1:4){
-    beta[i] ~ dnorm(0.0, 1.0E-5)
+        beta[i] ~ dnorm(0.0, 1.0E-5)
+        OR[i] <- exp(beta[i])
     }
     
     }",
-    file = "ThermalC_bayesian.bug")
+    file = "ThermalD_bayesian.bug")
 
 thermalDdata <- list(N = nrow(alex_data1),
                      y = alex_data1$Thermal.D,
                      Elevation = alex_data1$Elevation,
                      Temp = alex_data1$Temp,
-                     MC = alex_data1$M.C
+                     MC = alex_data1$M.C,
+                     samp = rep(0,nrow(alex_data1))
 )
 
-thermalDini <- list(list(beta = c(0.9, 0.002, 0.03, 1.59), phil = 0.12),
-                    list(beta = c(0.9, 0.002, 0.03, 1.59)/2, phil = 0.12/2))
+thermalDini <- list(list(beta = c(-3.4, -0.005, 0.19, -0.84), phi = 1/exp(-1.13)^2),
+                    list(beta = c(-3.4, -0.005, 0.19, -0.84)/2, phi = (1/exp(-1.13)^2)/2))
 
-thermalD_bayesian_noclust <- run.jags(model = "ThermalC_bayesian.bug",
-                              monitor=c("beta", "phil"),
+thermalD_bayesian_noclust <- run.jags(model = "ThermalD_bayesian.bug",
+                              monitor=c("beta", "phi", "OR"),
                               data = thermalDdata, inits = thermalDini, n.chains = 2,
-                              sample = 30000, burnin = 20000,
+                              sample = 5000, burnin = 20000,
                               thin = 15, adapt = 40000,
                               method = "rjags", jags.refresh = 10)
-thermalD_bayesian_noclust
+#thermalD_bayesian_noclust
 
 
 ###The posterior summary checks?
-plot(thermalD_bayesian_noclust, "trace", vars = c("beta", "phil"))
-plot(thermalD_bayesian_noclust, "autocorr", vars = c("beta", "phil"))
+plot(thermalD_bayesian_noclust, "trace", vars = c("beta", "phi", "OR"))
+plot(thermalD_bayesian_noclust, "autocorr", vars = c("beta", "phi", "OR"))
 dic_thermalD_noclust <- extract(thermalD_bayesian_noclust, what = "dic")
 dic_thermalD_noclust
 ```
@@ -464,6 +482,8 @@ dic_thermalC_clust
 
 ```{r}
 knitr::kable(thermalC_bayesian_clust$summaries[1:7, c(1:5)])
+toplot_thermalc_clust <- as.data.frame(thermalC_bayesian_clust$summaries[1:4, c(1:5)])
+
 ```
 
 ### SH
@@ -555,25 +575,32 @@ cat("
     model{
     #### #the Beta likelihood for the data
     for(i in 1: N){
-    y[i] ~ dbeta(alpha[i], be[i])
-    alpha[i]= mu[i]*phi
-    be[i]=(1-mu[i])*phi
-    logit(mu[i])=beta[1] + beta[2]*Elevation[i] + beta[3]*Temp[i] + beta[4]*MC[i] + 
-    b[Id[i]]
     
+    ll[i] <- loggam(phi) - loggam(phi*mu[i]) - 
+      loggam((1 - mu[i])*phi) + 
+      (mu[i]*phi - 1)*log(y[i]) + 
+      ((1 - mu[i])*phi - 1)*log(1-y[i])
+
+    logit(mu[i]) <- beta[2]*Elevation[i] + beta[3]*Temp[i] + beta[4]*MC[i] + b[Id[i]]
+    
+      #the poisson zero tricks  used because of 
+      #nonstandard likelihood #
+      constant[i] <- 10000 - ll[i]
+      samp[i] ~ dpois(constant[i]) 
     }
 
      #the cluster random effects
     for(j in 1:J) {
-    b[j] ~ dnorm(beta[1], tau.b)
+      b[j] ~ dnorm(beta[1], tau.b)
     }
     
     #priors for the population parameters
-    phi~dgamma(0.1,0.1)
+    phi~dgamma(0.001, 0.001)
     
     #prior for the betas
     for(i in 1:4){
-    beta[i] ~ dnorm(0.0, 1.0E-5)
+        beta[i] ~ dnorm(0.0, 1.0E-5)
+        OR[i] <- exp(beta[i])
     }
     
     #priors for the population parameters
@@ -592,7 +619,7 @@ cat("
     icc <- sigma.b / (sigma.b + sigma_y)
     
     }",
-    file = "ThermalC_bayesian.bug")
+    file = "ThermalD_bayesian.bug")
 
 thermalDdata <- list(N = nrow(alex_data1),
                      Id = alex_data1$Id,
@@ -600,23 +627,25 @@ thermalDdata <- list(N = nrow(alex_data1),
                      Elevation = alex_data1$Elevation,
                      Temp = alex_data1$Temp,
                      MC = alex_data1$M.C,
-                     J = length(unique(alex_data1$Id)
-                    ))
+                     J = length(unique(alex_data1$Id)), 
+                     samp = rep(0, nrow(alex_data1))         
+                     )
+                                
                      
-thermalDini <- list(list(beta = c(0.9, 0.002, 0.03, 1.59), phi = 0.12,sigma_y=0.12, 
+thermalDini <- list(list(beta = c(-3.4, -0.005, 0.19, -0.84), phi = 1/exp(-1.13), 
                          sigma.b = 0.12),
-                    list(beta = c(0.9, 0.002, 0.03, 1.59)/2, phi = 0.12/2,sigma_y=0.12/2, 
+                    list(beta =  c(-3.4, -0.005, 0.19, -0.84)/2, phi = (1/exp(-1.13))/2, 
                          sigma.b = 0.12/2))
 
-thermalDclust_bayesian <- run.jags(model = "ThermalC_bayesian.bug",
-                                   monitor=c("beta", "phi", "icc"),
+thermalDclust_bayesian <- run.jags(model = "ThermalD_bayesian.bug",
+                                   monitor=c("beta", "phi", "icc", "sigma.b", "OR"),
                                    data = thermalDdata, inits = thermalDini, n.chains = 2,
-                                   sample = 30000, burnin = 20000,
+                                   sample = 10000, burnin = 20000,
                                    thin = 15, adapt = 40000,
                                    method = "rjags", jags.refresh = 10)
 ###The posterior summary checks?
-plot(thermalDclust_bayesian, "trace", vars = c("beta", "phi","icc"))
-plot(thermalDclust_bayesian, "autocorr", vars = c("beta", "phi","icc"))
+plot(thermalDclust_bayesian, "trace", vars = c("beta", "phi","icc", "sigma.b"))
+plot(thermalDclust_bayesian, "autocorr", vars = c("beta", "phi","icc", "sigma.b"))
 dic_thermalDclust <- extract(thermalDclust_bayesian, what = "dic")
 dic_thermalDclust
 
@@ -672,7 +701,7 @@ cat("
       
     #### #the normal likelihood for the data
     for(i in 1: N) {
-      mu[i] <-  beta[2]*Elevation[i] + beta[3]*Temp[i] + beta[4]*MC[i] + sx[i]
+      mu[i] <-  beta[1] + beta[2]*Elevation[i] + beta[3]*Temp[i] + beta[4]*MC[i] + sx[i]
       y[i] ~ dnorm(mu[i], tau)
   
     }
@@ -724,6 +753,8 @@ dic_thermalC_sp
 
 ```{r}
 knitr::kable(thermalC_bayesian_sp$summaries[1:8, c(1:5)])
+toplot_thermalc_spatial <- as.data.frame(thermalC_bayesian_sp$summaries[1:4, c(1:5)])
+
 ```
 
 
@@ -767,7 +798,7 @@ cat("
       
     #### #the normal likelihood for the data
     for(i in 1: N) {
-      mu[i] <-  beta[2]*Elevation[i] + beta[3]*Temp[i] + beta[4]*MC[i] + sx[i]
+      mu[i] <-  beta[1] + beta[2]*Elevation[i] + beta[3]*Temp[i] + beta[4]*MC[i] + sx[i]
       y[i] ~ dlnorm(mu[i], tau)
   
     }
@@ -819,6 +850,8 @@ dic_SH_sp
 ```{r}
 knitr::kable(SH_bayesian_sp$summaries[1:8, c(1:5)])
 ```
+
+
 
 
 ## Spatial-Cluster Model
@@ -942,6 +975,22 @@ dic_thermalC_spclust
 
 ```{r}
 knitr::kable(thermalC_bayesian_spclust$summaries[1:11, c(1:5)])
+toplot_thermalc_spclust <- as.data.frame(thermalC_bayesian_spclust$summaries[1:4, c(1:5)])
+toplot <- rbind(toplot_thermalc_noclust, toplot_thermalc_clust, toplot_thermalc_spatial, toplot_thermalc_spclust)
+toplot$Model <- c(rep("Linear", 4), rep("Cluster", 4), rep("Spatial", 4), rep("Spatial-Cluster", 4))
+toplot$Parameter <- rep(c("Intercept", "Elevation", "Temperature", "Moisture Content"), 4)
+
+##plotting the whole thing
+toplot %>% ggplot(aes(x = Parameter, y = Mean, color = Model)) + 
+  geom_errorbar(aes(ymin = Lower95, ymax = Upper95, color = Model), size = 1.5, width = 0.2,
+                position = position_dodge(0.7)) + theme_minimal() + ggtitle("Effects on Thermal.C") + 
+  labs(y = "Credible Interval and Posterior Mean")  + 
+  geom_point(aes(color = Model), size = 4, position = position_dodge(0.7)) + 
+  geom_hline(yintercept = 0, size = 1, linetype = 2) + 
+  scale_y_continuous(breaks = seq(-6, 7, by = 0.5))
+
+#NOTE: All covariates are not significant because the credible interval contains 0
+  
 ```
 
 ### Variogram for SH Based on Clustered-Data Model

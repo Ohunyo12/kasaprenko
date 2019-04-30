@@ -1,0 +1,29 @@
+
+    model{
+    #### #the beta likelihood for the data
+    for(i in 1: N){
+    
+    ll[i] <- loggam(phi) - loggam(phi*mu[i]) - 
+      loggam((1 - mu[i])*phi) + 
+      (mu[i]*phi - 1)*log(y[i]) + 
+      ((1 - mu[i])*phi - 1)*log(1-y[i])
+
+    logit(mu[i]) = beta[1] + beta[2]*Elevation[i] + beta[3]*Temp[i] + beta[4]*MC[i]
+    
+      #the poisson zero tricks  used because of 
+      #nonstandard likelihood #
+      constant[i] = 10000 - ll[i]
+      samp[i] ~ dpois(constant[i])
+
+    }
+    
+    #priors for the population parameters
+    phi ~ dgamma(0.001,0.001)
+    
+    #prior for the betas
+    for(i in 1:4){
+        beta[i] ~ dnorm(0.0, 1.0E-5)
+        OR[i] <- exp(beta[i])
+    }
+    
+    }
