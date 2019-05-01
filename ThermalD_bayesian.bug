@@ -10,6 +10,12 @@
 
     logit(mu[i]) = beta[1] + beta[2]*Elevation[i] + beta[3]*Temp[i] + beta[4]*MC[i]
     
+    #original variance of y
+    var_y[i] <- mu[i] * (1 - mu[i]) / (1 + phi)
+    
+    #residuals of y
+    res_y[i] <- (y[i] - mu[i]) / var_y[i]
+    
       #the poisson zero tricks  used because of 
       #nonstandard likelihood #
       constant[i] = 10000 - ll[i]
@@ -19,6 +25,8 @@
     
     #priors for the population parameters
     phi ~ dgamma(0.001,0.001)
+    sigma_y <- 1/phi
+    
     
     #prior for the betas
     for(i in 1:4){
